@@ -54,7 +54,7 @@ coreos:
     - name: static.network
       content: |
         [Match]
-        MACAddress=$VPS_MAC
+        Name=eth0
 
         [Network]
         Address=$VPS_IP/23
