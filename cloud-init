@@ -1,0 +1,76 @@
+mkdir -p /tmp/work
+export VPS_IP=160.16.74.103         # VPSのIPアドレス
+export VPS_GATEWAY=160.16.74.1      # VPSのGATEWAYアドレス
+export VPS_DNS1=210.188.224.10      # プライマリDNS
+export VPS_DNS2=210.188.224.11      # セカンダリDNS
+export VPS_MAC=9C:A3:BA:01:CD:F1    # MACアドレス
+export NTP_SERVER=ntp1.sakura.ad.jp # sakura以外ならntp.nict.jpが便利
+export ETCD_HOST=`curl -s https://discovery.etcd.io/new` # ディスカバリー用アドレスを発行する
+cat > /tmp/work/cloud-config << EOT
+#cloud-config
+hostname: $HOSTNAME
+coreos:
+#  etcd:
+#    discovery: $ETCD_HOST
+#    peer-addr: $VPS_IP:7001
+
+  units:
+#    - name: etcd.service
+#      command: start
+#    - name: fleet.service
+#      command: start
+    - name: docker.service
+      command: start
+    - name: timezone.service
+      command: start
+      content: |
+        [Unit]
+        Description=set the timezone
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/bin/timedatectl set-timezone Asia/Tokyo
+        RemainAfterExit=yes
+    - name: swap.service
+      command: start
+      content: |
+        [Unit]
+        Description=Turn on swap
+
+        [Service]
+        Type=oneshot
+        Environment="SWAPFILE=/swapfile"
+        Environment="SWAPSIZE=1GiB"
+        RemainAfterExit=true
+        ExecStartPre=/usr/bin/sh -c '/usr/bin/fallocate -l \${SWAPSIZE} \${SWAPFILE} && chmod 0600 \${SWAPFILE} && /usr/sbin/mkswap \${SWAPFILE}'
+        ExecStartPre=/usr/sbin/losetup -f \${SWAPFILE}
+        ExecStart=/usr/bin/sh -c "/sbin/swapon \$(/usr/sbin/losetup -j \${SWAPFILE} | /usr/bin/cut -d : -f 1)"
+        ExecStop=/usr/bin/sh -c "/sbin/swapoff \$(/usr/sbin/losetup -j \${SWAPFILE} | /usr/bin/cut -d : -f 1)"
+        ExecStopPost=/usr/bin/sh -c "/usr/sbin/losetup -d \$(/usr/sbin/losetup -j \${SWAPFILE} | /usr/bin/cut -d : -f 1)"
+
+        [Install]
+        WantedBy=multi-user.target
+
+    - name: static.network
+      content: |
+        [Match]
+        MACAddress=$VPS_MAC
+
+        [Network]
+        Address=$VPS_IP/23
+        Gateway=$VPS_GATEWAY
+        DNS=$VPS_DNS1
+        DNS=$VPS_DNS2
+
+write_files:
+  - path: /etc/ntp.conf
+    content: |
+      server $NTP_SERVER
+      restrict $NTP_SERVER kod nomodify notrap nopeer noquery
+      restrict default ignore
+      restrict 127.0.0.1
+
+ssh_authorized_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC85SU30Fw29mO90r3KmCEBVhM/B1hW6YboR4c5KkNEYf/v2CbjP8BoLr2ASW8n/hA7VX/RA/fIZQRlgsxG41POX20pj6ny1+O+BcaM9/gumGsn8gx2umF5QsNCgzaVYMbaS3CglHsF5YJGwVmssaX6Ytm+LAtzTvx0t7Fv3/cgzo25GZikHYw89SYsWKkRbjJFmG18s7BU+tfnHPajtVQdbDSWwuXu5c7cmLXvsNVsyIFRULr+Z6J02OGc/gddP76QH/pK5AD7AwSkBgkSd3U7AmsN6e3mX3JSUE8cAQA/7JGmYlJ8LTyRXi0VpjuENUW6EmHFCk+nWkgWVTwRLiu5 vimtaku@vimtaku-no-MacBook-Pro.local
+
+EOT

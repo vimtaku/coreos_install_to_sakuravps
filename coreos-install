@@ -1,0 +1,4 @@
+wget -O /tmp/work/coreos-install https://raw.githubusercontent.com/coreos/init/master/bin/coreos-install
+(cd /tmp/work && tar cf /work.tar ./)
+rm -rf /tmp/work/
+sync
